@@ -5,8 +5,8 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from .config import APP_NAME, INSTANCE_LOCK_PATH
 from .history import HistoryStore
-from .watcher import ClipboardWatcher
 from .ui import PickerDialog
+from .watcher import ClipboardWatcher
 
 if sys.platform == "darwin":
     from .mac import window_join_all_spaces_and_raise
@@ -73,6 +73,7 @@ class AppController(QtCore.QObject):
         self._listener = None
         try:
             from pynput import keyboard
+
             self._pressed_keys = set()
             self._listener = keyboard.Listener(
                 on_press=self._on_key_press,
@@ -90,16 +91,31 @@ class AppController(QtCore.QObject):
     def _on_key_press(self, key):
         try:
             from pynput import keyboard
+
             self._pressed_keys.add(key)
             is_v = False
             if isinstance(key, keyboard.KeyCode):
                 ch = (key.char or "").lower()
-                if ch == 'v':
+                if ch == "v":
                     is_v = True
-                elif getattr(key, 'vk', None) in (9, 0x09):
+                elif getattr(key, "vk", None) in (9, 0x09):
                     is_v = True
-            cmd_down = any(k in self._pressed_keys for k in (keyboard.Key.cmd, getattr(keyboard.Key, 'cmd_l', None), getattr(keyboard.Key, 'cmd_r', None)))
-            shift_down = any(k in self._pressed_keys for k in (keyboard.Key.shift, getattr(keyboard.Key, 'shift_l', None), getattr(keyboard.Key, 'shift_r', None)))
+            cmd_down = any(
+                k in self._pressed_keys
+                for k in (
+                    keyboard.Key.cmd,
+                    getattr(keyboard.Key, "cmd_l", None),
+                    getattr(keyboard.Key, "cmd_r", None),
+                )
+            )
+            shift_down = any(
+                k in self._pressed_keys
+                for k in (
+                    keyboard.Key.shift,
+                    getattr(keyboard.Key, "shift_l", None),
+                    getattr(keyboard.Key, "shift_r", None),
+                )
+            )
             if is_v and cmd_down and shift_down:
                 self._emit_hotkey()
         except Exception:
@@ -107,7 +123,7 @@ class AppController(QtCore.QObject):
 
     def _on_key_release(self, key):
         try:
-            if key in getattr(self, '_pressed_keys', set()):
+            if key in getattr(self, "_pressed_keys", set()):
                 self._pressed_keys.remove(key)
         except Exception:
             self._pressed_keys = set()
@@ -126,7 +142,11 @@ class AppController(QtCore.QObject):
         # Position near mouse cursor but keep within screen bounds
         pos = QtGui.QCursor.pos()
         screen = QtGui.QGuiApplication.screenAt(pos) or QtGui.QGuiApplication.primaryScreen()
-        avail = screen.availableGeometry() if screen else QtGui.QGuiApplication.primaryScreen().availableGeometry()
+        avail = (
+            screen.availableGeometry()
+            if screen
+            else QtGui.QGuiApplication.primaryScreen().availableGeometry()
+        )
         geom = self._picker.frameGeometry()
         geom.moveCenter(pos)
         x = max(avail.left(), min(geom.left(), avail.right() - geom.width()))
@@ -135,11 +155,19 @@ class AppController(QtCore.QObject):
 
         if not self._picker.isVisible():
             self._picker.show()
-        QtCore.QTimer.singleShot(1, lambda: window_join_all_spaces_and_raise(self._picker) if sys.platform == "darwin" else self._picker.raise_())
+        QtCore.QTimer.singleShot(
+            1,
+            lambda: (
+                window_join_all_spaces_and_raise(self._picker)
+                if sys.platform == "darwin"
+                else self._picker.raise_()
+            ),
+        )
 
     @QtCore.Slot()
     def _paste_into_previous(self):
         from .mac import send_cmd_v
+
         QtCore.QTimer.singleShot(80, send_cmd_v)
 
     def _quit(self):

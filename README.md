@@ -119,6 +119,24 @@ python3 main.py
 
 ---
 
+## Pre-commit форматирование
+
+Чтобы автоматически сортировать импорты и форматировать код при каждом коммите:
+
+```bash
+pip install pre-commit
+pre-commit install
+
+# Запустить на всём репозитории один раз
+pre-commit run --all-files
+```
+
+Конфиги:
+- `.pre-commit-config.yaml` — хуки: isort (импорты), black (форматирование) + мелкие фиксы
+- `pyproject.toml` — единые настройки для black и isort (line-length 100, профиль black)
+
+---
+
 ## Roadmap / идеи
 
 - Настройка хоткея в UI

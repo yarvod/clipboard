@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import os
+from pathlib import Path
 import shutil
 import subprocess
-from pathlib import Path
 
-from PySide6 import QtGui, QtCore
+from PySide6 import QtCore, QtGui
 from PySide6.QtGui import QGuiApplication
-
 
 ASSETS_DIR = Path("assets")
 ICON_PNG = ASSETS_DIR / "icon.png"
@@ -55,14 +54,26 @@ def build_icns_from_png(png_path: Path, iconset_dir: Path, icns_path: Path) -> N
 
     for sz in sizes_1x:
         out = iconset_dir / f"icon_{sz}x{sz}.png"
-        subprocess.run(["sips", "-z", str(sz), str(sz), str(png_path), "--out", str(out)], check=False, stdout=subprocess.DEVNULL)
+        subprocess.run(
+            ["sips", "-z", str(sz), str(sz), str(png_path), "--out", str(out)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+        )
 
     for sz in sizes_2x:
         base = sz // 2
         out = iconset_dir / f"icon_{base}x{base}@2x.png"
-        subprocess.run(["sips", "-z", str(sz), str(sz), str(png_path), "--out", str(out)], check=False, stdout=subprocess.DEVNULL)
+        subprocess.run(
+            ["sips", "-z", str(sz), str(sz), str(png_path), "--out", str(out)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+        )
 
-    subprocess.run(["iconutil", "-c", "icns", str(iconset_dir), "-o", str(icns_path)], check=False, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ["iconutil", "-c", "icns", str(iconset_dir), "-o", str(icns_path)],
+        check=False,
+        stdout=subprocess.DEVNULL,
+    )
 
 
 def main():

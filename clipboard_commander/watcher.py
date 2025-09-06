@@ -19,7 +19,7 @@ class ClipboardWatcher(QtCore.QObject):
         self.store.cleared.connect(self._sync_last_from_clipboard)
 
         self._last_text = self.clip.text() or ""
-        self._last_img_sig = ''
+        self._last_img_sig = ""
         self._suppress_until_ms = 0
 
         self._timer = QtCore.QTimer(self)
@@ -90,10 +90,10 @@ class ClipboardWatcher(QtCore.QObject):
             if sig and sig == self._last_img_sig:
                 return
             # Set last signature early to avoid race duplicates
-            self._last_img_sig = sig or ''
-            img_dir = APP_DIR / 'images'
+            self._last_img_sig = sig or ""
+            img_dir = APP_DIR / "images"
             img_dir.mkdir(parents=True, exist_ok=True)
-            uuid = QtCore.QUuid.createUuid().toString().strip('{}')
+            uuid = QtCore.QUuid.createUuid().toString().strip("{}")
             path = img_dir / f"{uuid}.png"
             qimage.save(str(path), "PNG")
             self.store.add_image_path(str(path))
@@ -104,6 +104,7 @@ class ClipboardWatcher(QtCore.QObject):
         # Hash PNG-encoded bytes + size for robust cross-format deduplication
         try:
             from hashlib import md5
+
             ba = QtCore.QByteArray()
             buf = QtCore.QBuffer(ba)
             buf.open(QtCore.QIODevice.OpenModeFlag.WriteOnly)
@@ -119,12 +120,12 @@ class ClipboardWatcher(QtCore.QObject):
         try:
             self._last_text = self.clip.text() or ""
         except Exception:
-            self._last_text = ''
+            self._last_text = ""
         try:
             img = self.clip.image()
-            self._last_img_sig = self._image_signature(img) if img and not img.isNull() else ''
+            self._last_img_sig = self._image_signature(img) if img and not img.isNull() else ""
         except Exception:
-            self._last_img_sig = ''
+            self._last_img_sig = ""
         # Also suppress additions briefly to avoid races
         self._suppress_until_ms = QtCore.QTime.currentTime().msecsSinceStartOfDay() + 1200
 

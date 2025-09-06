@@ -1,13 +1,13 @@
-import sys
 from pathlib import Path
+import sys
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from .history import HistoryStore, ClipItem
 from .config import INTERNAL_MIME
-
+from .history import ClipItem, HistoryStore
 
 # ---------- Утилиты UI ----------
+
 
 class ClickableLabel(QtWidgets.QLabel):
     clicked = QtCore.Signal()
@@ -99,7 +99,8 @@ class ModernButton(QtWidgets.QPushButton):
         # Fill
         p.setPen(QtCore.Qt.PenStyle.NoPen)
         p.setBrush(bg)
-        path = QtGui.QPainterPath(); path.addRoundedRect(r, radius, radius)
+        path = QtGui.QPainterPath()
+        path.addRoundedRect(r, radius, radius)
         p.drawPath(path)
 
         # Border
@@ -114,6 +115,7 @@ class ModernButton(QtWidgets.QPushButton):
         p.setPen(text_col)
         p.drawText(self.rect(), int(QtCore.Qt.AlignmentFlag.AlignCenter), self.text())
 
+
 # (reverted) Removed model/delegate in favor of QWidget rows
 
 
@@ -123,6 +125,7 @@ class SmoothListWidget(QtWidgets.QListWidget):
     - Тачпад/трекпад: Qt присылает pixelDelta → отдаем базовой реализации (инерция «нативная»).
     - Колесо мыши: angleDelta → конвертируем в фиксированный пиксельный шаг, независимый от высоты элементов.
     """
+
     def __init__(self, parent=None, notch_pixels: int = 40):
         super().__init__(parent)
         self._notch_px = notch_pixels
@@ -150,6 +153,7 @@ class SmoothListWidget(QtWidgets.QListWidget):
 
 
 # ---------- Сам диалог ----------
+
 
 class PickerDialog(QtWidgets.QDialog):
     pasted = QtCore.Signal()
@@ -214,6 +218,7 @@ class PickerDialog(QtWidgets.QDialog):
         if sys.platform == "darwin":
             try:
                 from .mac import window_join_all_spaces_and_raise
+
                 window_join_all_spaces_and_raise(self)
             except Exception:
                 pass
@@ -297,7 +302,9 @@ class PickerDialog(QtWidgets.QDialog):
         row = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(row)
         # ЕДИНЫЕ внешние отступы «строки» — именно они формируют зазор между элементами
-        v.setContentsMargins(0, 6, 0, 6)  # top/bottom = 6px; горизонтальные отступы делает viewportMargins
+        v.setContentsMargins(
+            0, 6, 0, 6
+        )  # top/bottom = 6px; горизонтальные отступы делает viewportMargins
         v.setSpacing(0)
         v.addWidget(card)
 
@@ -345,8 +352,10 @@ class PickerDialog(QtWidgets.QDialog):
                 t = float(getattr(self, "_hover_factor", 0.0))
                 base_col = QtGui.QColor(17, 24, 39, int(0.10 * 255))
                 blue_col = QtGui.QColor(37, 99, 235)
+
                 def lerp(a, b, f):
                     return int(a + (b - a) * f)
+
                 col = QtGui.QColor(
                     lerp(base_col.red(), blue_col.red(), t),
                     lerp(base_col.green(), blue_col.green(), t),
@@ -357,14 +366,17 @@ class PickerDialog(QtWidgets.QDialog):
                 pen.setWidthF(1.5)
                 p.setPen(pen)
                 p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-                path = QtGui.QPainterPath(); path.addRoundedRect(r, radius, radius)
+                path = QtGui.QPainterPath()
+                path.addRoundedRect(r, radius, radius)
                 p.drawPath(path)
                 if t > 0.0:
                     alpha = int(26 * t)
                     band_outer = r.adjusted(1.0, 1.0, -1.0, -1.0)
                     band_inner = r.adjusted(3.0, 3.0, -3.0, -3.0)
-                    p_outer = QtGui.QPainterPath(); p_outer.addRoundedRect(band_outer, radius-1, radius-1)
-                    p_inner = QtGui.QPainterPath(); p_inner.addRoundedRect(band_inner, radius-3, radius-3)
+                    p_outer = QtGui.QPainterPath()
+                    p_outer.addRoundedRect(band_outer, radius - 1, radius - 1)
+                    p_inner = QtGui.QPainterPath()
+                    p_inner.addRoundedRect(band_inner, radius - 3, radius - 3)
                     ring = p_outer.subtracted(p_inner)
                     p.fillPath(ring, QtGui.QColor(37, 99, 235, alpha))
 
@@ -381,10 +393,12 @@ class PickerDialog(QtWidgets.QDialog):
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(8)
 
-        icon_lbl = QtWidgets.QLabel("📝" if it.kind == 'text' else "🖼️")
+        icon_lbl = QtWidgets.QLabel("📝" if it.kind == "text" else "🖼️")
         icon_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         icon_lbl.setFixedSize(22, 22)
-        icon_lbl.setStyleSheet("QLabel{font-size:16px; border:none; background: transparent; color:#111827;}")
+        icon_lbl.setStyleSheet(
+            "QLabel{font-size:16px; border:none; background: transparent; color:#111827;}"
+        )
         header.addWidget(icon_lbl)
         header.addStretch(1)
 
@@ -397,25 +411,35 @@ class PickerDialog(QtWidgets.QDialog):
         lay.addLayout(header)
 
         # Превью картинки
-        def _rounded_pixmap(src: QtGui.QPixmap, w_: int, h_: int, radius: int = 10) -> QtGui.QPixmap:
+        def _rounded_pixmap(
+            src: QtGui.QPixmap, w_: int, h_: int, radius: int = 10
+        ) -> QtGui.QPixmap:
             if src.isNull():
                 return src
-            scaled = src.scaled(w_, h_, QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                                QtCore.Qt.TransformationMode.SmoothTransformation)
+            scaled = src.scaled(
+                w_,
+                h_,
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation,
+            )
             pm = QtGui.QPixmap(scaled.size())
             pm.fill(QtCore.Qt.GlobalColor.transparent)
             p = QtGui.QPainter(pm)
             p.setRenderHint(QtGui.QPainter.Antialiasing, True)
             path = QtGui.QPainterPath()
-            path.addRoundedRect(QtCore.QRectF(0, 0, scaled.width(), scaled.height()), radius, radius)
+            path.addRoundedRect(
+                QtCore.QRectF(0, 0, scaled.width(), scaled.height()), radius, radius
+            )
             p.setClipPath(path)
             p.drawPixmap(0, 0, scaled)
             p.end()
             return pm
 
-        if it.kind == 'image' and it.img and Path(it.img).exists():
+        if it.kind == "image" and it.img and Path(it.img).exists():
             lbl_img = ClickableLabel()
-            lbl_img.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            lbl_img.setAlignment(
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
             lbl_img.setStyleSheet("QLabel{background: transparent; border:none;}")
             pm = QtGui.QPixmap(it.img)
             maxw, maxh = 360, 160
@@ -435,6 +459,7 @@ class PickerDialog(QtWidgets.QDialog):
                     except Exception:
                         pass
                     QtWidgets.QApplication.clipboard().setMimeData(md)
+
                 lbl_img.clicked.connect(_copy_image)
 
         # Текст
@@ -442,7 +467,9 @@ class PickerDialog(QtWidgets.QDialog):
             lbl = QtWidgets.QLabel(it.text.strip())
             lbl.setWordWrap(True)
             lbl.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
-            lbl.setStyleSheet("QLabel{font-size:13px; color:#111827; background: transparent; border:none;}")
+            lbl.setStyleSheet(
+                "QLabel{font-size:13px; color:#111827; background: transparent; border:none;}"
+            )
             lbl.setMinimumHeight(20)
             lbl.setCursor(QtCore.Qt.CursorShape.IBeamCursor)
             lay.addWidget(lbl)
@@ -471,7 +498,7 @@ class PickerDialog(QtWidgets.QDialog):
             return "только что"
         if mins < 60:
             return f"{mins} мин назад"
-        return it.dt.strftime('%H:%M %d.%m.%Y')
+        return it.dt.strftime("%H:%M %d.%m.%Y")
 
     def _activate_current(self):
         row = self.list.currentRow()
@@ -480,7 +507,7 @@ class PickerDialog(QtWidgets.QDialog):
         chosen = self.store.items[row]
         cb = QtWidgets.QApplication.clipboard()
         md = QtCore.QMimeData()
-        if chosen.kind == 'image' and chosen.img and Path(chosen.img).exists():
+        if chosen.kind == "image" and chosen.img and Path(chosen.img).exists():
             pm = QtGui.QPixmap(chosen.img)
             if not pm.isNull():
                 md.setImageData(pm.toImage())

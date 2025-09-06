@@ -1,8 +1,9 @@
 import sys
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from clipboard_commander.config import APP_NAME, APP_DIR, INSTANCE_LOCK_PATH
 from clipboard_commander.app import AppController
+from clipboard_commander.config import APP_DIR, APP_NAME, INSTANCE_LOCK_PATH
 from clipboard_commander.mac import set_app_accessory_policy
 
 

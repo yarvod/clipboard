@@ -1,34 +1,34 @@
 import sys
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 if sys.platform != "darwin":
     raise SystemExit("mac.py is macOS-only")
 
-import ctypes, ctypes.util
-from ctypes import c_void_p, c_bool, c_ulong, c_int
+import ctypes
+from ctypes import c_bool, c_int, c_ulong, c_void_p
+import ctypes.util
+import subprocess
 
 from Quartz import (
+    CFMachPortCreateRunLoopSource,
+    CFRunLoopAddSource,
+    CFRunLoopGetCurrent,
     CGEventCreateKeyboardEvent,
+    CGEventGetFlags,
+    CGEventGetIntegerValueField,
     CGEventPost,
-    kCGHIDEventTap,
+    CGEventTapCreate,
+    CGEventTapEnable,
+    kCFRunLoopCommonModes,
     kCGEventFlagMaskCommand,
     kCGEventFlagMaskShift,
     kCGEventKeyDown,
     kCGEventKeyUp,
-    kCGSessionEventTap,
     kCGHeadInsertEventTap,
-    CGEventTapCreate,
-    CFMachPortCreateRunLoopSource,
-    CFRunLoopAddSource,
-    CFRunLoopGetCurrent,
-    kCFRunLoopCommonModes,
-    CGEventTapEnable,
-    CGEventGetFlags,
-    CGEventGetIntegerValueField,
+    kCGHIDEventTap,
     kCGKeyboardEventKeycode,
+    kCGSessionEventTap,
 )
-import subprocess
-
 
 K_V = 0x09  # virtual keycode for 'V'
 
@@ -37,6 +37,7 @@ def send_cmd_v():
     down = CGEventCreateKeyboardEvent(None, K_V, True)
     up = CGEventCreateKeyboardEvent(None, K_V, False)
     from Quartz import CGEventSetFlags
+
     CGEventSetFlags(down, kCGEventFlagMaskCommand)
     CGEventSetFlags(up, kCGEventFlagMaskCommand)
     CGEventPost(kCGHIDEventTap, down)
@@ -51,7 +52,7 @@ class HotkeyTap:
         self._tap = None
         self._source = None
         self._enabled = False
-        self._objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library('objc'))
+        self._objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
         self._CFRunLoopGetCurrent = CFRunLoopGetCurrent
 
     def start(self) -> bool:
@@ -99,7 +100,7 @@ class HotkeyTap:
 
 def has_accessibility_permission() -> bool:
     try:
-        app_services = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ApplicationServices'))
+        app_services = ctypes.cdll.LoadLibrary(ctypes.util.find_library("ApplicationServices"))
         try:
             AXIsProcessTrusted = app_services.AXIsProcessTrusted
             AXIsProcessTrusted.restype = c_bool
@@ -118,10 +119,13 @@ def request_accessibility_permission(open_settings: bool = True) -> bool:
     ok = has_accessibility_permission()
     if not ok and open_settings:
         try:
-            subprocess.run([
-                'open',
-                'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
-            ], check=False)
+            subprocess.run(
+                [
+                    "open",
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                ],
+                check=False,
+            )
         except Exception:
             pass
     return ok
@@ -129,7 +133,7 @@ def request_accessibility_permission(open_settings: bool = True) -> bool:
 
 def set_app_accessory_policy():
     # Hide Dock icon and keep only status bar presence
-    objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library('objc'))
+    objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
     sel_registerName = objc.sel_registerName
     sel_registerName.restype = c_void_p
     sel_registerName.argtypes = [ctypes.c_char_p]
@@ -152,10 +156,10 @@ def set_app_accessory_policy():
 
 def window_join_all_spaces_and_raise(qwidget):
     # Apply NSWindow behaviors for overlay on fullscreen apps
-    import ctypes.util
     from ctypes import c_void_p
+    import ctypes.util
 
-    objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library('objc'))
+    objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
     sel_registerName = objc.sel_registerName
     sel_registerName.restype = c_void_p
     sel_registerName.argtypes = [ctypes.c_char_p]
@@ -184,7 +188,7 @@ def window_join_all_spaces_and_raise(qwidget):
     objc_msgSend.argtypes = [c_void_p, c_void_p, c_bool]
     objc_msgSend(nswindow, sel_setHOD, c_bool(False))
 
-    app_services = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ApplicationServices'))
+    app_services = ctypes.cdll.LoadLibrary(ctypes.util.find_library("ApplicationServices"))
     CGWindowLevelForKey = app_services.CGWindowLevelForKey
     CGWindowLevelForKey.restype = c_int
     CGWindowLevelForKey.argtypes = [c_int]
