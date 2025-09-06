@@ -20,6 +20,100 @@ class ClickableLabel(QtWidgets.QLabel):
         super().mousePressEvent(ev)
 
 
+# Modern macOS-like animated button
+class ModernButton(QtWidgets.QPushButton):
+    def __init__(self, text: str = "", parent: QtWidgets.QWidget | None = None):
+        super().__init__(text, parent)
+        self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
+        self._hover_anim = QtCore.QVariantAnimation(self)
+        self._hover_anim.setStartValue(0.0)
+        self._hover_anim.setEndValue(1.0)
+        self._hover_anim.setDuration(140)
+        self._hover_anim.valueChanged.connect(self._on_anim)
+        self._hover = 0.0
+        self._pressed = 0.0
+        self._font = QtGui.QFont()
+        self._font.setPointSize(12)
+        self.setMinimumHeight(32)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Fixed)
+        # Remove native frame, we'll paint
+        self.setStyleSheet("QPushButton{border:none; background: transparent;}")
+
+    def _on_anim(self, v):
+        try:
+            self._hover = float(v)
+            self.update()
+        except Exception:
+            pass
+
+    def enterEvent(self, e: QtCore.QEvent) -> None:
+        self._hover_anim.stop()
+        self._hover_anim.setDirection(QtCore.QAbstractAnimation.Direction.Forward)
+        self._hover_anim.start()
+        return super().enterEvent(e)
+
+    def leaveEvent(self, e: QtCore.QEvent) -> None:
+        self._hover_anim.stop()
+        self._hover_anim.setDirection(QtCore.QAbstractAnimation.Direction.Backward)
+        self._hover_anim.start()
+        return super().leaveEvent(e)
+
+    def mousePressEvent(self, e: QtGui.QMouseEvent) -> None:
+        self._pressed = 1.0
+        self.update()
+        return super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e: QtGui.QMouseEvent) -> None:
+        res = super().mouseReleaseEvent(e)
+        self._pressed = 0.0
+        self.update()
+        return res
+
+    def paintEvent(self, e: QtGui.QPaintEvent) -> None:
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        r = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        radius = 10.0
+
+        # Colors
+        base_bg = QtGui.QColor("#ffffff")
+        hover_bg = QtGui.QColor("#f3f4f6")
+        press_bg = QtGui.QColor("#e5e7eb")
+        base_border = QtGui.QColor("#e5e7eb")
+        text_col = QtGui.QColor("#111827")
+
+        # Interpolate background
+        def mix(c1: QtGui.QColor, c2: QtGui.QColor, t: float) -> QtGui.QColor:
+            return QtGui.QColor(
+                int(c1.red() + (c2.red() - c1.red()) * t),
+                int(c1.green() + (c2.green() - c1.green()) * t),
+                int(c1.blue() + (c2.blue() - c1.blue()) * t),
+                int(c1.alpha() + (c2.alpha() - c1.alpha()) * t),
+            )
+
+        bg = mix(base_bg, hover_bg, self._hover)
+        if self._pressed > 0:
+            bg = mix(bg, press_bg, 0.75)
+
+        # Fill
+        p.setPen(QtCore.Qt.PenStyle.NoPen)
+        p.setBrush(bg)
+        path = QtGui.QPainterPath(); path.addRoundedRect(r, radius, radius)
+        p.drawPath(path)
+
+        # Border
+        pen = QtGui.QPen(mix(base_border, QtGui.QColor("#d1d5db"), self._hover))
+        pen.setWidthF(1.0)
+        p.setPen(pen)
+        p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        p.drawPath(path)
+
+        # Text
+        p.setFont(self._font)
+        p.setPen(text_col)
+        p.drawText(self.rect(), int(QtCore.Qt.AlignmentFlag.AlignCenter), self.text())
+
 # (reverted) Removed model/delegate in favor of QWidget rows
 
 
@@ -102,7 +196,7 @@ class PickerDialog(QtWidgets.QDialog):
         self.list.itemActivated.connect(self._activate_current)
         self.search.textChanged.connect(self._refill)
 
-        btn_clear = QtWidgets.QPushButton("Очистить историю")
+        btn_clear = ModernButton("Очистить историю")
         btn_clear.clicked.connect(self._clear)
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -139,9 +233,43 @@ class PickerDialog(QtWidgets.QDialog):
     # ---------- Действия ----------
 
     def _clear(self):
-        if QtWidgets.QMessageBox.question(self, "Подтверждение", "Очистить всю историю?") == QtWidgets.QMessageBox.Yes:
+        if self._confirm("Подтверждение", "Очистить всю историю?"):
             self.store.clear()
             self._refill()
+
+    def _confirm(self, title: str, text: str) -> bool:
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle(title)
+        dlg.setModal(True)
+
+        v = QtWidgets.QVBoxLayout(dlg)
+        v.setContentsMargins(16, 16, 16, 12)
+        v.setSpacing(12)
+
+        lbl = QtWidgets.QLabel(text)
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("QLabel{color:#111827; font-size:13px;}")
+        v.addWidget(lbl)
+
+        btns = QtWidgets.QHBoxLayout()
+        btns.addStretch(1)
+        btn_cancel = ModernButton("Отмена")
+        btn_ok = ModernButton("Да")
+        btn_ok.setDefault(True)
+        btn_ok.setAutoDefault(True)
+        # Default focus on "Да"
+        btn_ok.setFocus(QtCore.Qt.FocusReason.ActiveWindowFocusReason)
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_ok.clicked.connect(dlg.accept)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_ok)
+        v.addLayout(btns)
+
+        # Fix size to content to avoid resizing/dragging
+        dlg.adjustSize()
+        dlg.setFixedSize(dlg.sizeHint())
+
+        return dlg.exec() == QtWidgets.QDialog.DialogCode.Accepted
 
     def _refill(self):
         self.list.clear()
