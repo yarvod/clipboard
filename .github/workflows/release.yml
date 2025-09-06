@@ -1,0 +1,112 @@
+name: build-and-release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x86_64
+          - runner: macos-14
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip wheel
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate icons
+        run: python generate_icons.py
+
+      - name: Set VERSION from tag (if tagging)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "${GITHUB_REF_NAME#v}" > VERSION
+
+      - name: Build app
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Locate app bundle
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_NAME="ClipboardCommander"
+          CANDIDATE_1="dist/${APP_NAME}.app"
+          CANDIDATE_2="dist/${APP_NAME}/${APP_NAME}.app"
+          if [ -d "$CANDIDATE_1" ]; then
+            echo "app_path=$CANDIDATE_1" >> $GITHUB_OUTPUT
+          elif [ -d "$CANDIDATE_2" ]; then
+            echo "app_path=$CANDIDATE_2" >> $GITHUB_OUTPUT
+          else
+            echo "::error::App bundle not found in dist/"; ls -la dist || true; exit 1
+          fi
+
+      - name: Zip app bundle
+        id: zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          ARCH='${{ matrix.arch }}'
+          OUTDIR="release"
+          mkdir -p "$OUTDIR"
+          APP_PATH='${{ steps.locate.outputs.app_path }}'
+          OUT_ZIP="$OUTDIR/ClipboardCommander-${VERSION}-macos-${ARCH}.zip"
+          # Preserve resource forks/metadata for macOS apps
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$OUT_ZIP"
+          echo "zip_path=$OUT_ZIP" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.arch }}
+          path: ${{ steps.zip.outputs.zip_path }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [build-macos]
+    runs-on: macos-13
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show downloaded files
+        run: |
+          echo "Artifacts tree:"; ls -R artifacts || true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

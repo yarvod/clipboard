@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 APP_NAME="ClipboardCommander"
+# Try to read version from VERSION file (optional)
+APP_VERSION="$(cat VERSION 2>/dev/null || echo "0.0.0")"
 ASSETS_DIR="assets"
 ICON_ICNS="$ASSETS_DIR/app.icns"
 if [ ! -f "$ICON_ICNS" ]; then
@@ -62,6 +64,11 @@ if [ -d "$APP_BUNDLE" ]; then
   echo "[build] Patching Info.plist at $PLIST"
   /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$PLIST" || true
   /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$PLIST" || true
+  # Set version fields
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$PLIST" || \
+  /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APP_VERSION" "$PLIST" || true
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$PLIST" || \
+  /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $APP_VERSION" "$PLIST" || true
   # Hide from Dock (LSUIElement)
   if /usr/libexec/PlistBuddy -c "Print :LSUIElement" "$PLIST" >/dev/null 2>&1; then
     /usr/libexec/PlistBuddy -c "Set :LSUIElement 1" "$PLIST" || true
