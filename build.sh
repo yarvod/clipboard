@@ -1,159 +1,116 @@
 #!/bin/sh
+# Сборка dist/ClipboardCommander.app из исходников на Swift (нужны только Command Line Tools).
+#
+#   ./build.sh                         — под текущую архитектуру, ad-hoc подпись
+#   ARCHS="arm64 x86_64" ./build.sh    — универсальная сборка (Apple Silicon + Intel)
+#   CODESIGN_IDENTITY="Apple Development: Имя (TEAMID)" ./build.sh
+#                                      — подпись сертификатом: доступ «Универсальный доступ»
+#                                        не слетает после каждой пересборки
+#   ./build.sh --install               — ещё и установить в /Applications и запустить
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 APP_NAME="ClipboardCommander"
-# Try to read version from VERSION file (optional)
-APP_VERSION="$(cat VERSION 2>/dev/null || echo "0.0.0")"
-ASSETS_DIR="assets"
-ICON_ICNS="$ASSETS_DIR/app.icns"
-if [ ! -f "$ICON_ICNS" ]; then
-  echo "[build] Missing $ICON_ICNS. Generate icons first: python3 generate_icons.py" >&2
-  exit 1
-fi
+BUNDLE_ID="com.yarvod.clipboardcommander"
+VERSION="$(cat VERSION 2>/dev/null || echo 0.0.0)"
+MIN_MACOS="14.0"
+ARCHS="${ARCHS:-$(uname -m)}"
+IDENTITY="${CODESIGN_IDENTITY:--}"
+INSTALL=false
 
-echo "[build] Cleaning previous build artifacts"
-for target in build dist ClipboardCommander.spec *.spec; do
-  if [ -e "$target" ]; then
-    echo "  -> removing $target"
-    chmod -R u+w "$target" 2>/dev/null || true
-    rm -rf "$target"
-  fi
+for arg in "$@"; do
+  case "$arg" in
+    --install) INSTALL=true ;;
+    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    *) echo "[build] неизвестный аргумент: $arg" >&2; exit 2 ;;
+  esac
 done
 
-echo "[build] Running PyInstaller (optimized)"
-pyinstaller main.py \
-  --name "$APP_NAME" \
-  --windowed \
-  --onedir \
-  --noconsole \
-  --icon "$ICON_ICNS" \
-  --osx-bundle-identifier "com.yarvod.clipboardcommander" \
-  --strip \
-  --clean \
-  --optimize 2 \
-  --exclude-module PySide6.QtWebEngineCore \
-  --exclude-module PySide6.QtWebEngineWidgets \
-  --exclude-module PySide6.QtWebEngineQuick \
-  --exclude-module PySide6.QtWebEngine \
-  --exclude-module PySide6.QtQml \
-  --exclude-module PySide6.QtQuick \
-  --exclude-module PySide6.QtMultimedia \
-  --exclude-module PySide6.QtMultimediaWidgets \
-  --exclude-module PySide6.QtCharts \
-  --exclude-module PySide6.QtBluetooth \
-  --exclude-module PySide6.QtSerialPort \
-  --exclude-module PySide6.QtSvg \
-  --exclude-module PySide6.QtSvgWidgets \
-  --exclude-module PySide6.QtTest \
-  -y
+BUILD_DIR="build"
+APP="dist/$APP_NAME.app"
+SDK="$(xcrun --sdk macosx --show-sdk-path)"
+SOURCES="$(find Sources -name '*.swift' | sort)"
+mkdir -p "$BUILD_DIR" dist
 
-# Post-process Info.plist to hide Dock icon at launch
-APP_BUNDLE="dist/${APP_NAME}.app"
-if [ ! -d "$APP_BUNDLE" ]; then
-  # some PyInstaller versions nest app inside a folder named like the app
-  if [ -d "dist/${APP_NAME}/${APP_NAME}.app" ]; then
-    APP_BUNDLE="dist/${APP_NAME}/${APP_NAME}.app"
-  fi
+# После неполного обновления Command Line Tools рядом с новым bridging.modulemap остаётся
+# старый usr/include/swift/module.modulemap, и swiftc падает с
+# «redefinition of module 'SwiftBridging'». Прячем старый файл через VFS-overlay.
+# Настоящее лечение: sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install
+EXTRA_FLAGS=""
+SWIFT_INCLUDE="$(cd "$(dirname "$(xcrun --find swiftc)")/../include/swift" 2>/dev/null && pwd || true)"
+if [ -n "$SWIFT_INCLUDE" ] && [ -f "$SWIFT_INCLUDE/module.modulemap" ] && [ -f "$SWIFT_INCLUDE/bridging.modulemap" ]; then
+  echo "[build] обходим устаревший $SWIFT_INCLUDE/module.modulemap"
+  : > "$BUILD_DIR/empty.modulemap"
+  cat > "$BUILD_DIR/vfs-overlay.yaml" <<EOF
+{ "version": 0, "case-sensitive": "false", "roots": [
+  { "type": "file", "name": "$SWIFT_INCLUDE/module.modulemap",
+    "external-contents": "$ROOT_DIR/$BUILD_DIR/empty.modulemap" } ] }
+EOF
+  EXTRA_FLAGS="-vfsoverlay $BUILD_DIR/vfs-overlay.yaml"
 fi
 
-if [ -d "$APP_BUNDLE" ]; then
-  PLIST="$APP_BUNDLE/Contents/Info.plist"
-  echo "[build] Patching Info.plist at $PLIST"
-  /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$PLIST" || true
-  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$PLIST" || true
-  # Set version fields
-  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$PLIST" || \
-  /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APP_VERSION" "$PLIST" || true
-  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$PLIST" || \
-  /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $APP_VERSION" "$PLIST" || true
-  # Hide from Dock (LSUIElement)
-  if /usr/libexec/PlistBuddy -c "Print :LSUIElement" "$PLIST" >/dev/null 2>&1; then
-    /usr/libexec/PlistBuddy -c "Set :LSUIElement 1" "$PLIST" || true
-  else
-    /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$PLIST" || true
-  fi
-  # Ensure icon is embedded
-  if [ -f "$ICON_ICNS" ]; then
-    cp -f "$ICON_ICNS" "$APP_BUNDLE/Contents/Resources/app.icns" || true
-    /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile app.icns" "$PLIST" || true
-  fi
-  echo "[build] Built app: $APP_BUNDLE"
+BINARIES=""
+for arch in $ARCHS; do
+  echo "[build] компиляция ($arch)"
+  mkdir -p "$BUILD_DIR/$arch"
+  # shellcheck disable=SC2086
+  xcrun swiftc -O -wmo -swift-version 5 $EXTRA_FLAGS \
+    -target "$arch-apple-macosx$MIN_MACOS" -sdk "$SDK" \
+    -module-name "$APP_NAME" \
+    -framework AppKit -framework Carbon -framework ServiceManagement \
+    $SOURCES -o "$BUILD_DIR/$arch/$APP_NAME"
+  BINARIES="$BINARIES $BUILD_DIR/$arch/$APP_NAME"
+done
 
-  # Prune unused Qt plugins to slim the bundle (hardcore mode)
-  echo "[build] Pruning Qt plugins"
-  prune_plugins_dir() {
-    local base="$1"
-    [ -d "$base" ] || return 0
-    echo "  - checking $base"
-    # Keep only platforms (Cocoa) and imageformats (png,jpeg,ico,icns)
-    for d in "$base"/*; do
-      [ -d "$d" ] || continue
-      case "$(basename "$d")" in
-        platforms)
-          # remove everything except libqcocoa.dylib
-          for f in "$d"/*; do
-            [ -e "$f" ] || continue
-            case "$(basename "$f")" in
-              libqcocoa.dylib) : ;; # keep
-              *) rm -f "$f" ;;
-            esac
-          done
-          ;;
-        imageformats)
-          for f in "$d"/*; do
-            [ -e "$f" ] || continue
-            case "$(basename "$f")" in
-              qpng.*|qjpeg.*|qico.*|qicns.*) : ;; # keep
-              *) rm -f "$f" ;;
-            esac
-          done
-          ;;
-        *)
-          rm -rf "$d" # drop other plugin categories (styles, printsupport, tls, etc.)
-          ;;
-      esac
-    done
-  }
+echo "[build] сборка $APP"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+# shellcheck disable=SC2086
+lipo -create $BINARIES -output "$APP/Contents/MacOS/$APP_NAME"
+cp assets/app.icns "$APP/Contents/Resources/AppIcon.icns"
 
-  # Common locations for PyInstaller’s Qt plugins inside the .app
-  prune_plugins_dir "$APP_BUNDLE/Contents/Plugins"
-  prune_plugins_dir "$APP_BUNDLE/Contents/MacOS/PySide6/Qt/plugins"
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>ru</string>
+  <key>CFBundleDisplayName</key><string>Clipboard Commander</string>
+  <key>CFBundleExecutable</key><string>$APP_NAME</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>$APP_NAME</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>$BUNDLE_ID</string>
+      <key>CFBundleURLSchemes</key><array><string>clipboardcommander</string></array>
+    </dict>
+  </array>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>LSMinimumSystemVersion</key><string>$MIN_MACOS</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHumanReadableCopyright</key><string>Менеджер буфера обмена для macOS</string>
+</dict>
+</plist>
+PLIST
 
-  # Remove Qt translations if present
-  echo "[build] Removing Qt translations (if any)"
-  rm -rf "$APP_BUNDLE/Contents/Resources/translations" || true
-  rm -rf "$APP_BUNDLE/Contents/MacOS/PySide6/Qt/translations" || true
+echo "[build] подпись ($IDENTITY)"
+codesign --force --options runtime --sign "$IDENTITY" "$APP"
 
-  # Thin universal binaries to current arch to reduce size
-  ARCH=$(uname -m)
-  echo "[build] Thinning binaries to arch: $ARCH"
-  thin_macho() {
-    local f="$1"
-    # Only process regular files
-    [ -f "$f" ] || return 0
-    # Check if it's a universal binary containing multiple arches
-    if file -b "$f" 2>/dev/null | grep -q "universal"; then
-      if lipo -info "$f" 2>/dev/null | grep -q "$ARCH"; then
-        tmp="$f.thin"
-        lipo -thin "$ARCH" "$f" -output "$tmp" 2>/dev/null && mv -f "$tmp" "$f"
-      fi
-    fi
-  }
-  export -f thin_macho
-  # Common binary locations inside the bundle
-  find "$APP_BUNDLE/Contents" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) -print0 | xargs -0 -I {} bash -c 'thin_macho "$0"' {}
-
-  # Remove Python __pycache__ if any slipped in
-  find "$APP_BUNDLE/Contents" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true
-
-  # Re-sign ad-hoc after binary changes
-  echo "[build] Ad-hoc codesign"
-  codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null 2>&1 || true
-else
-  echo "[build] Warning: App bundle not found in dist/; check PyInstaller output" >&2
+if [ "$INSTALL" = true ]; then
+  DEST="/Applications/$APP_NAME.app"
+  echo "[build] установка в $DEST"
+  pkill -x "$APP_NAME" 2>/dev/null || true
+  rm -rf "$DEST"
+  ditto "$APP" "$DEST"
+  open "$DEST"
 fi
 
-echo "[build] Done"
+echo "[build] готово: $APP"

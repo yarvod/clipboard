@@ -3,56 +3,28 @@
 .AppleDouble
 .LSOverride
 
-# Python bytecode / cache
-__pycache__/
-*/__pycache__/
-*.py[cod]
-*$py.class
-
-# Environments
-.venv/
-venv/
-ENV/
-.python-version
-
-# Packaging / build
+# Swift / сборка
+.build/
+.swiftpm/
 build/
 dist/
-*.egg-info/
-.eggs/
+DerivedData/
+*.xcodeproj/xcuserdata/
+
+# Остатки старой версии на Python
+.venv/
+__pycache__/
 *.spec
 
-# Logs / temp
-logs/
-*.log
-*.tmp
-*.temp
-
-# Testing / coverage
-.pytest_cache/
-.tox/
-.nox/
-.coverage*
-coverage.xml
-
-# Type checkers / linters
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.ruff_cache/
-
-# Editors / IDEs
+# Редакторы
 .idea/
 .vscode/
 *.iml
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Misc
 *.swp
 *.swo
 *~
+
+# Секреты
 .env
 .env.*
 .envrc
